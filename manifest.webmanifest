@@ -1,0 +1,16 @@
+{
+  "name": "Aurin — Morning Vocabulary Practice",
+  "short_name": "Aurin",
+  "description": "A new word each morning, with pronunciation, practice prompts, spoken recording, and streaks.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "id": "./index.html",
+  "display": "standalone",
+  "background_color": "#F3F1FA",
+  "theme_color": "#FF6B4A",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
