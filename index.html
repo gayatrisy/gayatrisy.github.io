@@ -377,6 +377,34 @@
 <div id="aurin-root">
   <a class="skip-link" href="#main-content">Skip to today's word</a>
 
+  <!-- AUTH GATE -->
+  <div id="auth-screen" class="onboard-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <div class="onboard-card">
+      <div class="onboard-sky"><div class="sun"></div></div>
+      <div class="onboard-body">
+        <div class="onboard-step-tag" id="auth-mode-tag">Welcome back</div>
+        <h2 class="onboard-title" id="auth-title">Sign in to Aurin</h2>
+        <p class="onboard-text">Your streak, history, and settings are tied to your account, so they follow you anywhere you sign in. Recordings stay on the device that made them.</p>
+        <form id="auth-form" novalidate>
+          <div id="auth-error-slot"></div>
+          <div class="field-group" style="margin-bottom:14px;">
+            <label class="field-label" for="auth-email">Email</label>
+            <input type="email" class="text-input" id="auth-email" autocomplete="email" required>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="auth-password">Password</label>
+            <input type="password" class="text-input" id="auth-password" autocomplete="current-password" minlength="6" required>
+          </div>
+          <button type="button" class="btn btn-ghost" id="auth-forgot" style="padding-left:0; margin-top:6px;">Forgot password?</button>
+        </form>
+      </div>
+      <div class="onboard-footer">
+        <button type="submit" form="auth-form" class="btn btn-primary btn-full" id="auth-submit">Log in</button>
+        <button type="button" class="onboard-skip" id="auth-toggle-mode" style="align-self:center;">Don't have an account? Sign up</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ONBOARDING -->
   <div id="onboarding" class="onboard-overlay" role="dialog" aria-modal="true" aria-labelledby="onboard-title" hidden>
     <div class="onboard-card" id="onboard-card">
@@ -393,7 +421,7 @@
     </div>
   </div>
 
-  <div class="app-shell">
+  <div class="app-shell" id="app-shell" hidden>
     <!-- DESKTOP RAIL -->
     <nav class="rail" aria-label="Primary">
       <div class="brand"><div class="brand-mark" aria-hidden="true"></div><span class="brand-name">Aurin</span></div>
@@ -492,10 +520,16 @@
             <div id="notif-action-slot"></div>
           </div>
 
-          <div class="card settings-section" id="account-card">
-            <h2>Sync account</h2>
-            <p style="font-size:0.88rem; color:var(--ink-soft); line-height:1.5;">Sign in with a sync code to pick up your streak, history, and settings on another device. It's a simple shared code, not a secure password — please don't reuse one you use elsewhere. Recordings always stay on the device that made them.</p>
-            <div id="account-body"></div>
+          <div class="card settings-section">
+            <h2>Account</h2>
+            <div class="account-identity">
+              <div class="account-avatar" id="account-avatar" aria-hidden="true">A</div>
+              <div class="account-meta"><strong id="account-email">—</strong><span>Your streak, history, and settings are saved to this account. Recordings stay on this device.</span></div>
+            </div>
+            <div class="account-actions">
+              <button type="button" class="btn btn-secondary" id="log-out-btn">Log out</button>
+              <button type="button" class="btn btn-danger-ghost" id="clear-data-btn">Reset my progress</button>
+            </div>
           </div>
 
           <div class="card settings-section">
@@ -503,15 +537,6 @@
             <div class="settings-row">
               <div class="settings-row-text"><strong>Recording support</strong><span id="mic-support-desc">Checking your browser…</span></div>
               <span id="mic-status-slot"></span>
-            </div>
-          </div>
-
-          <div class="card settings-section">
-            <h2>Your data</h2>
-            <p style="font-size:0.88rem; color:var(--ink-soft); line-height:1.5;">Words, streaks, and recordings are stored only on this device, in this browser — nothing is uploaded.</p>
-            <div class="settings-row">
-              <div class="settings-row-text"><strong>Reset Aurin</strong><span>Erase all saved progress and recordings from this browser.</span></div>
-              <button type="button" class="btn btn-danger-ghost" id="clear-data-btn">Clear data</button>
             </div>
           </div>
         </section>
@@ -526,9 +551,26 @@
   <div class="visually-hidden" id="sr-announce" role="status" aria-live="polite"></div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script>
 (function(){
   "use strict";
+
+  /* ================= Firebase ================= */
+  var firebaseConfig = {
+    apiKey: "AIzaSyApeP2LstxbnTygMpsr5Jpbd4BC0mgHBgk",
+    authDomain: "aurin-worldle.firebaseapp.com",
+    projectId: "aurin-worldle",
+    storageBucket: "aurin-worldle.firebasestorage.app",
+    messagingSenderId: "893694524374",
+    appId: "1:893694524374:web:84b858a0a215dc41e24277"
+  };
+  firebase.initializeApp(firebaseConfig);
+  var fbAuth = firebase.auth();
+  var fbDb = firebase.firestore();
+  fbDb.enablePersistence({synchronizeTabs:true}).catch(function(){ /* offline cache is best-effort */ });
 
   /* ================= Icons ================= */
   var ICONS = {
@@ -646,8 +688,6 @@
   var LS_BEST_STREAK = 'aurin.beststreak.v1';
   var LS_LAST_NOTIFIED = 'aurin.lastnotified.v1';
   var LS_BANNER_DISMISS = 'aurin.bannerdismiss.v1';
-  var LS_ACCOUNT = 'aurin.account.v1';
-  var LS_LAST_SYNCED = 'aurin.lastsynced.v1';
 
   function loadJSON(key, fallback){
     try{ var v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }catch(e){ return fallback; }
@@ -1205,7 +1245,7 @@
       micDesc.textContent = 'This browser doesn’t support microphone recording. Try an up-to-date Chrome, Edge, Firefox, or Safari.';
     }
 
-    renderAccountSection();
+    renderAccountBox();
   }
 
   document.getElementById('reminder-time').addEventListener('change', function(e){
@@ -1223,8 +1263,7 @@
     Notification.requestPermission().then(function(){ renderSettings(); });
   }
   document.getElementById('clear-data-btn').addEventListener('click', function(){
-    var extra = account ? ' This also signs you out of sync on this device (your cloud copy is not deleted).' : '';
-    var ok = window.confirm('This will permanently erase your streaks, history, and saved recordings from this browser.'+extra+' Continue?');
+    var ok = window.confirm('This permanently erases your streak, history, and saved recordings from your account. You’ll stay signed in. Continue?');
     if(!ok) return;
     progress = {};
     bestStreak = 0;
@@ -1232,64 +1271,18 @@
     saveJSON(LS_BEST_STREAK, 0);
     localStorage.removeItem(LS_LAST_NOTIFIED);
     localStorage.removeItem(LS_BANNER_DISMISS);
-    if(account){ localStorage.removeItem(LS_ACCOUNT); account = null; accountLastSynced = null; localStorage.removeItem(LS_LAST_SYNCED); }
+    syncPushIfLoggedIn();
     idbClearAll().then(function(){
       renderStreakWidgets();
       renderToday();
       renderHistory();
-      toast('All local data cleared', ICONS.check);
+      toast('Progress reset', ICONS.check);
     });
   });
 
-  /* ================= Sync account ================= */
-  var dbNamespacePromise = null;
-  var dbAvailable = null; // null = unknown, true/false once resolved
-  function getDb(){
-    if(!dbNamespacePromise){
-      dbNamespacePromise = (window.claude && typeof window.claude.use === 'function')
-        ? window.claude.use('db').catch(function(){ return null; })
-        : Promise.resolve(null);
-      dbNamespacePromise.then(function(db){
-        dbAvailable = !!db;
-        if(currentView === 'settings') renderAccountSection();
-      });
-    }
-    return dbNamespacePromise;
-  }
-
-  function cryptoAvailable(){ return !!(window.crypto && window.crypto.subtle && window.crypto.getRandomValues); }
-  function bytesToHex(bytes){ return Array.prototype.map.call(bytes, function(b){ return b.toString(16).padStart(2,'0'); }).join(''); }
-  function hexToBytes(hex){ var arr = new Uint8Array(hex.length/2); for(var i=0;i<arr.length;i++){ arr[i]=parseInt(hex.substr(i*2,2),16); } return arr; }
-  function randomHex(n){ var arr = new Uint8Array(n); window.crypto.getRandomValues(arr); return bytesToHex(arr); }
-  function hashPasscode(passcode, saltHex){
-    return window.crypto.subtle.importKey('raw', new TextEncoder().encode(passcode), {name:'PBKDF2'}, false, ['deriveBits']).then(function(keyMaterial){
-      return window.crypto.subtle.deriveBits({name:'PBKDF2', salt:hexToBytes(saltHex), iterations:100000, hash:'SHA-256'}, keyMaterial, 256);
-    }).then(function(bits){ return bytesToHex(new Uint8Array(bits)); });
-  }
-  function sanitizeSyncId(raw){
-    var s = String(raw||'').trim().toLowerCase().replace(/[^a-z0-9_.~:@+-]+/g,'-').replace(/-{2,}/g,'-').replace(/^-+|-+$/g,'');
-    s = s.slice(0,40);
-    if(s === '.' || s === '..') return '';
-    return s;
-  }
+  /* ================= Account (Firebase) ================= */
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
-  }
-  function formatRelative(ts){
-    if(!ts) return '';
-    var diff = Date.now() - ts, s = Math.floor(diff/1000);
-    if(s < 60) return 'just now';
-    var m = Math.floor(s/60); if(m < 60) return m+'m ago';
-    var h = Math.floor(m/60); if(h < 24) return h+'h ago';
-    var d = Math.floor(h/24); return d+'d ago';
-  }
-  function dbErrorMessage(err){
-    var code = err && err.code;
-    if(code === 'quota_exceeded') return 'Sync storage is full right now — please try again later.';
-    if(code === 'resource_exhausted') return 'Too many sync attempts — please wait a moment and try again.';
-    if(code === 'revoked') return 'Sync access was turned off for this session.';
-    if(code === 'unavailable') return 'Sync is temporarily unavailable — please try again.';
-    return 'Something went wrong syncing your account. Please try again.';
   }
   function mergeProgress(local, remote){
     var merged = Object.assign({}, local);
@@ -1310,206 +1303,111 @@
     return merged;
   }
 
-  var account = loadJSON(LS_ACCOUNT, null);
-  var accountLastSynced = loadJSON(LS_LAST_SYNCED, null);
-  var accountFormMode = 'none'; // 'none' | 'create' | 'login'
-  var accountError = '';
-  var accountBusy = false;
+  var currentUser = null;
+  var authMode = 'login'; // 'login' | 'signup'
+  var authBusy = false;
+  var appStarted = false;
+
+  function authErrorMessage(err){
+    var code = err && err.code;
+    if(code === 'auth/email-already-in-use') return 'An account with that email already exists — try logging in instead.';
+    if(code === 'auth/invalid-email') return 'That email address doesn’t look right.';
+    if(code === 'auth/weak-password') return 'Password must be at least 6 characters.';
+    if(code === 'auth/wrong-password' || code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials') return 'Incorrect email or password.';
+    if(code === 'auth/user-not-found') return 'No account found with that email — check it, or sign up instead.';
+    if(code === 'auth/too-many-requests') return 'Too many attempts — please wait a moment and try again.';
+    if(code === 'auth/network-request-failed') return 'Network error — check your connection and try again.';
+    if(code === 'auth/missing-email') return 'Enter your email first.';
+    if(code === 'auth/configuration-not-found' || code === 'auth/operation-not-allowed') return 'Email/password sign-in isn’t turned on for this project yet — enable it in Firebase Console → Authentication → Sign-in method.';
+    return (err && err.message) ? err.message : 'Something went wrong. Please try again.';
+  }
+  function renderAuthError(msg){
+    document.getElementById('auth-error-slot').innerHTML = msg ? '<div class="status-banner warn">'+ICONS.warn+'<div>'+escapeHtml(msg)+'</div></div>' : '';
+  }
+  function renderAuthMode(){
+    var isSignup = authMode === 'signup';
+    document.getElementById('auth-mode-tag').textContent = isSignup ? 'Create your account' : 'Welcome back';
+    document.getElementById('auth-title').textContent = isSignup ? 'Sign up for Aurin' : 'Sign in to Aurin';
+    document.getElementById('auth-submit').textContent = authBusy ? 'Please wait…' : (isSignup ? 'Create account' : 'Log in');
+    document.getElementById('auth-submit').disabled = authBusy;
+    document.getElementById('auth-toggle-mode').textContent = isSignup ? 'Already have an account? Log in' : 'Don’t have an account? Sign up';
+    document.getElementById('auth-password').setAttribute('autocomplete', isSignup ? 'new-password' : 'current-password');
+  }
+  document.getElementById('auth-toggle-mode').addEventListener('click', function(){
+    authMode = authMode === 'login' ? 'signup' : 'login';
+    renderAuthError('');
+    renderAuthMode();
+  });
+  document.getElementById('auth-forgot').addEventListener('click', function(){
+    var email = document.getElementById('auth-email').value.trim();
+    if(!email){ renderAuthError('Enter your email above, then tap this again.'); return; }
+    fbAuth.sendPasswordResetEmail(email).then(function(){
+      renderAuthError('');
+      toast('Password reset email sent', ICONS.check);
+    }).catch(function(err){ renderAuthError(authErrorMessage(err)); });
+  });
+  document.getElementById('auth-form').addEventListener('submit', function(e){
+    e.preventDefault();
+    var email = document.getElementById('auth-email').value.trim();
+    var password = document.getElementById('auth-password').value;
+    if(!email || !password){ renderAuthError('Enter your email and password.'); return; }
+    authBusy = true; renderAuthError(''); renderAuthMode();
+    var action = authMode === 'signup'
+      ? fbAuth.createUserWithEmailAndPassword(email, password)
+      : fbAuth.signInWithEmailAndPassword(email, password);
+    action.catch(function(err){
+      authBusy = false; renderAuthMode();
+      renderAuthError(authErrorMessage(err));
+    });
+  });
+  function showAuthScreen(){
+    document.getElementById('auth-screen').hidden = false;
+    document.getElementById('app-shell').hidden = true;
+    document.getElementById('onboarding').hidden = true;
+    authBusy = false;
+    renderAuthMode();
+  }
+  function renderAccountBox(){
+    if(!currentUser) return;
+    var avatar = document.getElementById('account-avatar');
+    var emailEl = document.getElementById('account-email');
+    if(avatar) avatar.textContent = (currentUser.email||'A').charAt(0).toUpperCase();
+    if(emailEl) emailEl.textContent = currentUser.email || 'Signed in';
+  }
+  document.getElementById('log-out-btn').addEventListener('click', function(){
+    fbAuth.signOut();
+  });
 
   function syncPushIfLoggedIn(){
-    if(!account) return;
-    getDb().then(function(db){
-      if(!db) return;
-      db.doc('accounts/'+account.syncId).update({ progress:progress, settings:settings, bestStreak:bestStreak, updatedAt:Date.now() }).then(function(){
-        accountLastSynced = Date.now();
-        saveJSON(LS_LAST_SYNCED, accountLastSynced);
-        if(currentView === 'settings') renderAccountSection();
-      }).catch(function(){ /* best-effort background sync; surfaced only via explicit "Sync now" */ });
-    });
+    if(!currentUser) return;
+    fbDb.collection('users').doc(currentUser.uid).set({
+      progress: progress, settings: settings, bestStreak: bestStreak, updatedAt: Date.now()
+    }, {merge:true}).catch(function(){ /* offline persistence queues writes; best-effort otherwise */ });
   }
 
-  async function accountCreate(docId, displayName, passcode){
-    accountBusy = true; accountError = ''; renderAccountSection();
-    try{
-      var db = await getDb();
-      if(!db){ accountError = 'Sync isn’t available right now.'; accountBusy=false; renderAccountSection(); return; }
-      var ref = db.doc('accounts/'+docId);
-      var snap = await ref.get();
-      if(snap.exists){ accountError = 'That sync ID is taken — try another, or log in instead.'; accountBusy=false; renderAccountSection(); return; }
-      var salt = randomHex(16);
-      var hash = await hashPasscode(passcode, salt);
-      await ref.set({ displayName:displayName, salt:salt, hash:hash, progress:progress, settings:settings, bestStreak:bestStreak, updatedAt:Date.now() });
-      account = {syncId:docId, displayName:displayName};
-      saveJSON(LS_ACCOUNT, account);
-      accountLastSynced = Date.now();
-      saveJSON(LS_LAST_SYNCED, accountLastSynced);
-      accountFormMode = 'none';
-      toast('Sync account created', ICONS.check);
-    }catch(err){
-      accountError = dbErrorMessage(err);
-    }
-    accountBusy = false;
-    renderAccountSection();
-  }
-
-  async function accountLogin(docId, passcode){
-    accountBusy = true; accountError = ''; renderAccountSection();
-    try{
-      var db = await getDb();
-      if(!db){ accountError = 'Sync isn’t available right now.'; accountBusy=false; renderAccountSection(); return; }
-      var ref = db.doc('accounts/'+docId);
-      var snap = await ref.get();
-      if(!snap.exists){ accountError = 'No account found with that sync ID.'; accountBusy=false; renderAccountSection(); return; }
-      var data = snap.data();
-      var hash = await hashPasscode(passcode, data.salt);
-      if(hash !== data.hash){ accountError = 'Incorrect passcode.'; accountBusy=false; renderAccountSection(); return; }
-      progress = mergeProgress(progress, data.progress || {});
-      saveProgress();
-      settings = Object.assign({}, settings, data.settings || {});
-      saveSettings();
-      bestStreak = Math.max(bestStreak, data.bestStreak||0, computeStreak());
-      saveJSON(LS_BEST_STREAK, bestStreak);
-      account = {syncId:docId, displayName:data.displayName||docId};
-      saveJSON(LS_ACCOUNT, account);
-      await ref.update({ progress:progress, settings:settings, bestStreak:bestStreak, updatedAt:Date.now() });
-      accountLastSynced = Date.now();
-      saveJSON(LS_LAST_SYNCED, accountLastSynced);
-      accountFormMode = 'none';
-      renderStreakWidgets(); renderToday(); renderHistory();
-      toast('Signed in — synced from your account', ICONS.check);
-    }catch(err){
-      accountError = dbErrorMessage(err);
-    }
-    accountBusy = false;
-    renderAccountSection();
-  }
-
-  async function accountSyncNow(){
-    if(!account) return;
-    accountBusy = true; accountError = ''; renderAccountSection();
-    try{
-      var db = await getDb();
-      if(!db){ accountError = 'Sync isn’t available right now.'; accountBusy=false; renderAccountSection(); return; }
-      var ref = db.doc('accounts/'+account.syncId);
-      var snap = await ref.get();
-      if(snap.exists){
-        var data = snap.data();
+  function loadAccountAndStart(user){
+    currentUser = user;
+    fbDb.collection('users').doc(user.uid).get().then(function(doc){
+      if(doc.exists){
+        var data = doc.data() || {};
         progress = mergeProgress(progress, data.progress || {});
-        saveProgress();
         settings = Object.assign({}, settings, data.settings || {});
-        saveSettings();
-        bestStreak = Math.max(bestStreak, data.bestStreak||0, computeStreak());
-        saveJSON(LS_BEST_STREAK, bestStreak);
+        bestStreak = Math.max(bestStreak, data.bestStreak || 0);
+        saveProgress(); saveSettings(); saveJSON(LS_BEST_STREAK, bestStreak);
       }
-      await ref.update({ progress:progress, settings:settings, bestStreak:bestStreak, updatedAt:Date.now() });
-      accountLastSynced = Date.now();
-      saveJSON(LS_LAST_SYNCED, accountLastSynced);
-      renderStreakWidgets(); renderToday(); renderHistory();
-      toast('Synced', ICONS.check);
-    }catch(err){
-      accountError = dbErrorMessage(err);
-    }
-    accountBusy = false;
-    renderAccountSection();
-  }
-
-  function accountLogout(){
-    account = null;
-    localStorage.removeItem(LS_ACCOUNT);
-    accountError = ''; accountFormMode = 'none';
-    renderAccountSection();
-  }
-
-  async function accountDeleteCloud(){
-    if(!account) return;
-    var ok = window.confirm('This permanently deletes your synced streak, history, and settings from the cloud. Data already on this device is not affected. Continue?');
-    if(!ok) return;
-    accountBusy = true; renderAccountSection();
-    try{
-      var db = await getDb();
-      if(db){ await db.doc('accounts/'+account.syncId).delete(); }
-    }catch(err){ /* best-effort delete */ }
-    accountBusy = false;
-    toast('Cloud sync data deleted', ICONS.check);
-    accountLogout();
-  }
-
-  function renderAccountSection(){
-    var body = document.getElementById('account-body');
-    if(!body) return;
-
-    if(!cryptoAvailable()){
-      body.innerHTML = '<div class="status-banner warn">'+ICONS.warn+'<div><strong>Sync isn’t available</strong>This browser doesn’t support the secure hashing Aurin needs for sync codes. Your progress still saves on this device.</div></div>';
-      return;
-    }
-    if(dbAvailable === false){
-      body.innerHTML = '<div class="status-banner info">'+ICONS.info+'<div>Sync isn’t available in this session. Your progress still saves on this device.</div></div>';
-      return;
-    }
-
-    if(account){
-      body.innerHTML =
-        '<div class="account-signed-in">'+
-          '<div class="account-identity">'+
-            '<div class="account-avatar" aria-hidden="true">'+escapeHtml(account.displayName.charAt(0).toUpperCase())+'</div>'+
-            '<div class="account-meta"><strong>Synced as '+escapeHtml(account.displayName)+'</strong><span>'+(accountLastSynced ? 'Last synced '+formatRelative(accountLastSynced) : 'Not yet synced')+'</span></div>'+
-          '</div>'+
-          (accountError ? '<div class="status-banner warn">'+ICONS.warn+'<div>'+escapeHtml(accountError)+'</div></div>' : '')+
-          '<div class="account-actions">'+
-            '<button type="button" class="btn btn-secondary" id="acct-sync-now" '+(accountBusy?'disabled':'')+'>'+ICONS.redo+'<span>'+(accountBusy?'Syncing…':'Sync now')+'</span></button>'+
-            '<button type="button" class="btn btn-ghost" id="acct-logout" '+(accountBusy?'disabled':'')+'>Log out</button>'+
-            '<button type="button" class="btn btn-danger-ghost" id="acct-delete" '+(accountBusy?'disabled':'')+'>Delete cloud data</button>'+
-          '</div>'+
-        '</div>';
-      document.getElementById('acct-sync-now').addEventListener('click', accountSyncNow);
-      document.getElementById('acct-logout').addEventListener('click', accountLogout);
-      document.getElementById('acct-delete').addEventListener('click', accountDeleteCloud);
-      return;
-    }
-
-    if(accountFormMode === 'none'){
-      body.innerHTML = '<div class="account-toggle-row">'+
-        '<button type="button" class="btn btn-primary" id="acct-show-create">Create sync account</button>'+
-        '<button type="button" class="btn btn-secondary" id="acct-show-login">I already have one</button>'+
-      '</div>';
-      document.getElementById('acct-show-create').addEventListener('click', function(){ accountFormMode='create'; accountError=''; renderAccountSection(); });
-      document.getElementById('acct-show-login').addEventListener('click', function(){ accountFormMode='login'; accountError=''; renderAccountSection(); });
-      return;
-    }
-
-    var isCreate = accountFormMode === 'create';
-    body.innerHTML =
-      '<form class="account-form" id="acct-form" novalidate>'+
-        (accountError ? '<div class="status-banner warn">'+ICONS.warn+'<div>'+escapeHtml(accountError)+'</div></div>' : '')+
-        '<div class="field-group"><label class="field-label" for="acct-id">Sync ID</label>'+
-          '<input type="text" class="text-input" id="acct-id" autocomplete="off" placeholder="e.g. morning-mia"></div>'+
-        '<div class="field-group"><label class="field-label" for="acct-pass">Passcode</label>'+
-          '<input type="password" class="text-input" id="acct-pass" autocomplete="off" placeholder="At least 4 characters">'+
-          '<span class="field-hint">Not a secure password — just a shared code between your devices.</span></div>'+
-        (isCreate ? '<div class="field-group"><label class="field-label" for="acct-pass2">Confirm passcode</label><input type="password" class="text-input" id="acct-pass2" autocomplete="off"></div>' : '')+
-        '<div class="account-form-actions">'+
-          '<button type="submit" class="btn btn-primary" id="acct-submit" '+(accountBusy?'disabled':'')+'>'+(accountBusy ? 'Please wait…' : (isCreate?'Create account':'Log in'))+'</button>'+
-          '<button type="button" class="btn btn-ghost" id="acct-cancel">Cancel</button>'+
-        '</div>'+
-      '</form>';
-    document.getElementById('acct-cancel').addEventListener('click', function(){ accountFormMode='none'; accountError=''; renderAccountSection(); });
-    document.getElementById('acct-form').addEventListener('submit', function(e){
-      e.preventDefault();
-      var syncIdRaw = document.getElementById('acct-id').value;
-      var pass = document.getElementById('acct-pass').value;
-      var syncId = sanitizeSyncId(syncIdRaw);
-      if(!syncId){ accountError = 'Please use letters, numbers, or dashes for your sync ID.'; renderAccountSection(); return; }
-      if(pass.length < 4){ accountError = 'Passcode must be at least 4 characters.'; renderAccountSection(); return; }
-      if(isCreate){
-        var pass2 = document.getElementById('acct-pass2').value;
-        if(pass !== pass2){ accountError = 'Passcodes don’t match.'; renderAccountSection(); return; }
-        accountCreate(syncId, syncIdRaw.trim(), pass);
-      } else {
-        accountLogin(syncId, pass);
-      }
+      syncPushIfLoggedIn();
+    }).catch(function(){ /* offline: fall back to whatever's cached locally */ }).then(function(){
+      document.getElementById('auth-screen').hidden = true;
+      document.getElementById('app-shell').hidden = false;
+      renderAccountBox();
+      startApp();
     });
   }
-  getDb();
+
+  fbAuth.onAuthStateChanged(function(user){
+    if(user){ loadAccountAndStart(user); }
+    else { currentUser = null; appStarted = false; showAuthScreen(); }
+  });
 
   /* ================= Onboarding ================= */
   var ONBOARD_STEPS = [
@@ -1615,20 +1513,20 @@
   });
   document.getElementById('onboard-skip').addEventListener('click', closeOnboarding);
 
-  /* ================= Init ================= */
-  if(!window.claude){
-    var acctCard = document.getElementById('account-card');
-    if(acctCard) acctCard.hidden = true;
-  }
+  /* ================= Init (runs once per signed-in session) ================= */
+  function startApp(){
+    if(appStarted) return;
+    appStarted = true;
 
-  buildNav(document.getElementById('rail-tablist'), false);
-  buildNav(document.getElementById('bottom-tablist'), true);
-  switchView('today');
-  renderStreakWidgets();
-  maybeFireNotification();
+    buildNav(document.getElementById('rail-tablist'), false);
+    buildNav(document.getElementById('bottom-tablist'), true);
+    switchView('today');
+    renderStreakWidgets();
+    maybeFireNotification();
 
-  if(!loadJSON(LS_ONBOARDED, false)){
-    openOnboarding();
+    if(!loadJSON(LS_ONBOARDED, false)){
+      openOnboarding();
+    }
   }
 
   window.addEventListener('beforeunload', function(){
